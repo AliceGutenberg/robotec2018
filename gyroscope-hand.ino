@@ -1,8 +1,18 @@
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
+#include <SPI.h>
+#include "RF24.h"
+
+#define  CE_PIN  7
+#define  CSN_PIN 8
+#define bt 3
 
 MPU6050 mpu;
 
+RF24 radio(CE_PIN, CSN_PIN);
+
+int val = -1, preval;
+byte addresses[][6] = {"1Node", "2Node"};
 float ctx,cty,ctz;
 bool dmpReady = false;  
 uint8_t mpuIntStatus;   
@@ -69,6 +79,7 @@ int Get(){
   Z-=360;
   if(Z<0)
   Z=Z+360;
+  
   angle.x=X;
   angle.y=Y;
   angle.z=Z;
@@ -77,12 +88,19 @@ int Get(){
 
 void setup() {
   // put your setup code here, to run once:
-
+  pinMode(bt, INPT_PULLUP);
   Wire.begin();
   mpu.initialize();
   Wire.begin();
   Wire.setClock(400000);
   Serial.begin(9600);
+  radio.begin();
+  radio.setChannel(85);  
+  radio.setDataRate(RF24_250KBPS); 
+  radio.setPALevel(RF24_PA_MAX);
+  radio.openWritingPipe(addresses[0]);
+  radio.openReadingPipe(1, addresses[1]);
+  radio.stopListening(); 
   mpu.initialize();
   pinMode(2, INPUT);
   devStatus = mpu.dmpInitialize();
@@ -105,6 +123,14 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
+  preval = val;
+  val = !digitalRead(bt);
+  if(val == 1 and preval == 0){
+    Get();
+    ctx=90-angle.x;
+    cty=90-angle.y;
+    ctz=90-angle.z;
+  }
   Get();
   String S;
   S=angle.x;
@@ -112,7 +138,7 @@ void loop() {
   S+=angle.y;
   S+="    ";
   S+=angle.z;
-  
-Serial.println(S);
-delay(1000);
+  radio.write(&angle, sizeof(angle));
+  Serial.println(S);
+  delay(50);
 }
